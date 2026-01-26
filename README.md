@@ -20,3 +20,8 @@ reate a .env file in the same project folder and add your key:
 GROQ_API_KEY=your_actual_groq_api_key_here
 
 Run the Streamlit app from the terminal: streamlit run app.py Use the application in your browser. Enter your details (age, weight, diet type, restrictions, etc.) and click "Generate Plans".
+
+
+If You Want To Check if the code is running properly simply go to app.py and open new terminal and Enter this "export GROQ_API_KEY="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"  and press enter and now enter "streamlit run app.py
+
+ and remove (") before runnning
