@@ -4,3 +4,5 @@ langchain-groq
 langchain-core
 python-dotenv
 pydantic>=2.12
+pandas
+plotly
