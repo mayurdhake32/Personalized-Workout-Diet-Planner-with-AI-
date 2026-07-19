@@ -1,42 +1,74 @@
-import streamlit as st
-from langchain_groq import ChatGroq
-from langchain.chains import LLMChain
-
-from langchain_core.prompts import PromptTemplate
-from dotenv import load_dotenv
 import os
 
-# Load environment variables from the .env file
-load_dotenv("key.env")  # Ensure this file contains your GROQ_API_KEY
+import streamlit as st
+from dotenv import load_dotenv
+from langchain_groq import ChatGroq
+from langchain_core.prompts import PromptTemplate
 
-# Access the Groq API Key
+
+# --------------------------------------------------
+# 1. Load API Key
+# --------------------------------------------------
+
+load_dotenv("key.env")
+
 api_key = os.getenv("GROQ_API_KEY")
+
+# For Streamlit Cloud
 if not api_key:
-    api_key = st.secrets.get("GROQ_API_KEY")
+    try:
+        api_key = st.secrets["GROQ_API_KEY"]
+    except Exception:
+        api_key = None
+
+if not api_key:
+    st.error("GROQ_API_KEY is not configured.")
+    st.stop()
 
 
-# Initialize the LLM
-langchain_llm = ChatGroq(api_key=api_key, model="llama-3.3-70b-versatile")
+# --------------------------------------------------
+# 2. Initialize Groq LLM
+# --------------------------------------------------
 
-# Define the prompt template for plan generation
+langchain_llm = ChatGroq(
+    api_key=api_key,
+    model="llama-3.3-70b-versatile",
+    temperature=0.7
+)
+
+
+# --------------------------------------------------
+# 3. Plan Prompt
+# --------------------------------------------------
+
 plan_prompt_template = """
-You are a fitness and diet planner. Using the following inputs, create two detailed plans:
-1. A **diet plan** table listing day-to-day food intake for {number_of_weeks} weeks.
-2. A **workout plan** table listing day-to-day exercises for {number_of_weeks} weeks.
+You are a fitness and diet planner.
 
-Inputs:
-- **Workout type**: {workout_type}
-- **Diet type**: {diet_type}
-- **Current body weight**: {current_weight} kg
-- **Target weight**: {target_weight} kg
-- **Specific dietary restrictions**: {dietary_restrictions}
-- **Health conditions**: {health_conditions}
-- **Age**: {age}
-- **Gender**: {gender}
-- **Other instructions**: {comments}
+Using the following user inputs, create two detailed plans:
 
-Return the plans in a neat, structured format with tables and include any relevant key notes.
+1. A diet plan table listing day-to-day food intake for {number_of_weeks} weeks.
+2. A workout plan table listing day-to-day exercises for {number_of_weeks} weeks.
+
+User Inputs:
+
+- Workout type: {workout_type}
+- Diet type: {diet_type}
+- Current body weight: {current_weight} kg
+- Target weight: {target_weight} kg
+- Dietary restrictions: {dietary_restrictions}
+- Health conditions: {health_conditions}
+- Age: {age}
+- Gender: {gender}
+- Other instructions: {comments}
+
+Return the plans in a neat, structured format using Markdown tables.
+
+Include relevant key notes.
+
+Important:
+If the user has a health condition, include a recommendation to consult a qualified healthcare professional before following a new diet or workout plan.
 """
+
 plan_prompt = PromptTemplate(
     input_variables=[
         "workout_type",
@@ -53,55 +85,153 @@ plan_prompt = PromptTemplate(
     template=plan_prompt_template,
 )
 
-# Define the prompt template for chat interactions
+
+# --------------------------------------------------
+# 4. Chat Prompt
+# --------------------------------------------------
+
 chat_prompt_template = """
-You are a fitness and diet expert. Answer the following user question based on the given plan:
+You are a fitness and diet assistant.
 
-Plan: {plan}
-Question: {question}
+Answer the user's question based on the following personalized plan.
 
-Provide a clear and helpful response.
+PLAN:
+{plan}
+
+USER QUESTION:
+{question}
+
+Provide a clear and helpful answer.
+
+If the question involves a medical condition, injury, or serious health concern,
+recommend consulting a qualified healthcare professional.
 """
+
 chat_prompt = PromptTemplate(
-    input_variables=["plan", "question"], template=chat_prompt_template
+    input_variables=["plan", "question"],
+    template=chat_prompt_template
 )
 
-# Set up the chains
-plan_chain = LLMChain(llm=langchain_llm, prompt=plan_prompt)
-chat_chain = LLMChain(llm=langchain_llm, prompt=chat_prompt)
 
-# Streamlit App
-st.set_page_config(page_title="🏋️‍♀️ Fitness and Diet Planner", layout="wide")
-st.title("🏋️‍♀️ Fitness and Diet Planner")
+# --------------------------------------------------
+# 5. Create Modern LangChain Chains
+# --------------------------------------------------
 
-# Creating a two-column layout
+plan_chain = plan_prompt | langchain_llm
+
+chat_chain = chat_prompt | langchain_llm
+
+
+# --------------------------------------------------
+# 6. Streamlit Page Configuration
+# --------------------------------------------------
+
+st.set_page_config(
+    page_title="🏋️ Fitness and Diet Planner",
+    page_icon="🏋️",
+    layout="wide"
+)
+
+st.title("🏋️ Fitness and Diet Planner")
+st.write("Create a personalized workout and diet plan using AI.")
+
+
+# --------------------------------------------------
+# 7. Two-Column Layout
+# --------------------------------------------------
+
 col1, col2 = st.columns(2)
 
-# Column 1: User Inputs
-with col1:
-    st.header("Enter your details:")
-    workout_type = st.text_input("Workout Type (e.g., Weight Loss, Muscle Gain)")
-    diet_type = st.text_input("Diet Type (e.g., Indian, Mediterranean)")
-    current_weight = st.number_input(
-        "Current Body Weight (kg)", min_value=30.0, max_value=200.0, value=75.0, step=1.0
-    )
-    target_weight = st.number_input(
-        "Target Weight (kg)", min_value=30.0, max_value=200.0, value=68.0, step=1.0
-    )
-    dietary_restrictions = st.text_input("Dietary Restrictions (e.g., No dairy, Low sugar)")
-    health_conditions = st.text_input("Any Health Conditions?", "")
-    age = st.number_input("Age", min_value=10, max_value=100, value=30, step=1)
-    gender = st.selectbox("Gender", ["Male", "Female", "Other"])
-    number_of_weeks = st.slider("Number of Weeks", min_value=1, max_value=12, value=4)
-    comments = st.text_area("Additional Comments")
 
-    if st.button("Generate Plans"):
-        # Clear conversation history but retain the plan
-        st.session_state["messages"] = []
-        with st.spinner("Generating personalized fitness and diet plans..."):
+# --------------------------------------------------
+# 8. User Input Section
+# --------------------------------------------------
+
+with col1:
+
+    st.header("Enter Your Details")
+
+    workout_type = st.text_input(
+        "Workout Type",
+        placeholder="Example: Weight Loss, Muscle Gain"
+    )
+
+    diet_type = st.text_input(
+        "Diet Type",
+        placeholder="Example: Indian, Mediterranean"
+    )
+
+    current_weight = st.number_input(
+        "Current Body Weight (kg)",
+        min_value=30.0,
+        max_value=200.0,
+        value=75.0,
+        step=1.0
+    )
+
+    target_weight = st.number_input(
+        "Target Weight (kg)",
+        min_value=30.0,
+        max_value=200.0,
+        value=68.0,
+        step=1.0
+    )
+
+    dietary_restrictions = st.text_input(
+        "Dietary Restrictions",
+        placeholder="Example: No dairy, Low sugar"
+    )
+
+    health_conditions = st.text_input(
+        "Any Health Conditions?",
+        placeholder="Example: Diabetes, Knee pain, None"
+    )
+
+    age = st.number_input(
+        "Age",
+        min_value=10,
+        max_value=100,
+        value=30,
+        step=1
+    )
+
+    gender = st.selectbox(
+        "Gender",
+        ["Male", "Female", "Other"]
+    )
+
+    number_of_weeks = st.slider(
+        "Number of Weeks",
+        min_value=1,
+        max_value=12,
+        value=4
+    )
+
+    comments = st.text_area(
+        "Additional Comments",
+        placeholder="Enter any additional instructions..."
+    )
+
+
+    # --------------------------------------------------
+    # Generate Plan Button
+    # --------------------------------------------------
+
+    if st.button(
+        "🚀 Generate Plans",
+        use_container_width=True
+    ):
+
+        # Clear previous chat history
+        st.session_state.messages = []
+
+        with st.spinner(
+            "Generating your personalized fitness and diet plan..."
+        ):
+
             try:
-                # Generate and store the new plan
-                response = plan_chain.run(
+
+                response = plan_chain.invoke(
                     {
                         "workout_type": workout_type,
                         "diet_type": diet_type,
@@ -115,51 +245,126 @@ with col1:
                         "comments": comments,
                     }
                 )
-                st.session_state.plan = response  # Store the new plan
-                st.success("Plans generated successfully!")
+
+                # Store only the text content
+                st.session_state.plan = response.content
+
+                st.success(
+                    "✅ Plans generated successfully!"
+                )
+
             except Exception as e:
-                st.error(f"An error occurred: {e}")
 
-# Column 2: Display Plan
+                st.error(
+                    f"An error occurred: {e}"
+                )
+
+
+# --------------------------------------------------
+# 9. Display Generated Plan
+# --------------------------------------------------
+
 with col2:
-    if "plan" in st.session_state and st.session_state.plan:
-        st.header("Your Plans:")
-        st.markdown(f'<div class="plan-box">{st.session_state.plan}</div>', unsafe_allow_html=True)
 
-# Chatbox Section
-if "plan" in st.session_state and st.session_state.plan:
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.subheader("Converse with your plan")
+    if (
+        "plan" in st.session_state
+        and st.session_state.plan
+    ):
 
-    # Initialize chat history if not already present
+        st.header("📋 Your Personalized Plan")
+
+        st.markdown(
+            st.session_state.plan
+        )
+
+
+# --------------------------------------------------
+# 10. Chat Section
+# --------------------------------------------------
+
+if (
+    "plan" in st.session_state
+    and st.session_state.plan
+):
+
+    st.markdown("---")
+
+    st.subheader("💬 Chat With Your Plan")
+
+
+    # Initialize chat history
     if "messages" not in st.session_state:
+
         st.session_state.messages = []
 
-    # Display chat history
-    for msg in st.session_state.messages:
-        st.chat_message(msg["role"]).write(msg["content"])
 
-    # Ask question input field at the bottom
-    if prompt := st.chat_input("Ask a question about your plan"):
-        # Append user question to chat history
-        st.session_state.messages.append({"role": "user", "content": prompt})
+    # Display previous messages
+    for message in st.session_state.messages:
 
-        # Get the assistant's response
+        with st.chat_message(message["role"]):
+
+            st.write(message["content"])
+
+
+    # Chat input
+    user_question = st.chat_input(
+        "Ask a question about your plan..."
+    )
+
+
+    if user_question:
+
+        # Display user question
+        st.session_state.messages.append(
+            {
+                "role": "user",
+                "content": user_question
+            }
+        )
+
+
+        with st.chat_message("user"):
+
+            st.write(user_question)
+
+
+        # Get AI answer
         try:
-            answer = chat_chain.run({"plan": st.session_state.plan, "question": prompt})
+
+            response = chat_chain.invoke(
+                {
+                    "plan": st.session_state.plan,
+                    "question": user_question
+                }
+            )
+
+            answer = response.content
+
+
         except Exception as e:
+
             answer = f"An error occurred: {e}"
 
-        # Append assistant response to chat history
-        st.session_state.messages.append({"role": "assistant", "content": answer})
 
-        # Display the assistant's response in chat
-        st.chat_message("user").write(prompt)
-        st.chat_message("assistant").write(answer)
+        # Store AI response
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": answer
+            }
+        )
 
-# Footer
+
+        # Display AI response
+        with st.chat_message("assistant"):
+
+            st.write(answer)
+
+
+# --------------------------------------------------
+# 11. Footer
+# --------------------------------------------------
+
 st.markdown("---")
-st.caption(" Vikram Bhat")
-if __name__ == "__main__":
-    import os
-    os.system("streamlit run app.py")
+
+st.caption("Created by Vikram Bhat")
