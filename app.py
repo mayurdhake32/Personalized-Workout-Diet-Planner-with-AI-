@@ -11,6 +11,8 @@ load_dotenv("key.env")  # Ensure this file contains your GROQ_API_KEY
 
 # Access the Groq API Key
 api_key = os.getenv("GROQ_API_KEY")
+if not api_key:
+    api_key = st.secrets.get("GROQ_API_KEY")
 
 
 # Initialize the LLM
