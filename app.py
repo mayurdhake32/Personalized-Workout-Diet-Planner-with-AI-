@@ -158,3 +158,6 @@ if "plan" in st.session_state and st.session_state.plan:
 # Footer
 st.markdown("---")
 st.caption(" Vikram Bhat")
+if __name__ == "__main__":
+    import os
+    os.system("streamlit run app.py")
